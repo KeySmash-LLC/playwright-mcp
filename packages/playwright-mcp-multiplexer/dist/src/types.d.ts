@@ -14,7 +14,8 @@ export interface InstanceConfig {
     headless?: boolean;
     browser?: string;
     storageState?: string;
-    userDataDir?: string;
+    /** Path to user data dir to copy. `null` forces --isolated (no profile copy), `undefined` falls back to server config. */
+    userDataDir?: string | null;
     cdpEndpoint?: string;
     extension?: boolean;
     args?: string[];
@@ -30,6 +31,7 @@ export interface MultiplexerConfig {
     profileName?: string;
     cdpEndpoint?: string;
     extension?: boolean;
+    executablePath?: string;
 }
 export interface AugmentedTool extends Tool {
 }

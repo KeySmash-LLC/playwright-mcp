@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { VirtualDisplayManager } from './virtual-display.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 function getProfileManifest(browser) {
@@ -42,6 +43,8 @@ export class InstanceManager {
     instances = new Map();
     profileDirs = new Map(); // instanceId → temp profile root
     configFiles = new Map(); // instanceId → temp config file path
+    virtualDisplays = new Map(); // instanceId → ':N' display
+    virtualDisplayManager = new VirtualDisplayManager();
     nextId = 1;
     config;
     workspaceRoot;
@@ -56,6 +59,7 @@ export class InstanceManager {
             profileName: config.profileName ?? 'Default',
             cdpEndpoint: config.cdpEndpoint ?? '',
             extension: config.extension ?? false,
+            executablePath: config.executablePath ?? '',
         };
     }
     /**
@@ -97,11 +101,28 @@ export class InstanceManager {
         };
         this.instances.set(id, instance);
         try {
-            // Build environment for child process
-            const env = {
-                ...process.env,
-                DEBUG: process.env.DEBUG ?? '',
-            };
+            const headless = instanceConfig.headless ?? this.config.defaultHeadless;
+            // Allocate a virtual display for headless instances so Chrome still runs
+            // in headed mode (same rendering, same fingerprint) but stays invisible.
+            if (headless) {
+                const display = await this.virtualDisplayManager.allocate();
+                this.virtualDisplays.set(id, display);
+            }
+            // Build environment for child process — start from parent env
+            const env = {};
+            for (const [k, v] of Object.entries(process.env)) {
+                if (v !== undefined)
+                    env[k] = v;
+            }
+            env.DEBUG = env.DEBUG ?? '';
+            // Point Chrome at the right display
+            const virtualDisplay = this.virtualDisplays.get(id);
+            if (virtualDisplay) {
+                // Headless: override DISPLAY to our Xvfb, remove Wayland so Chrome uses X11
+                env.DISPLAY = virtualDisplay;
+                delete env.WAYLAND_DISPLAY;
+            }
+            // Visible: inherit DISPLAY/WAYLAND_DISPLAY from parent as-is
             // DOM state toggle: explicitly disable or enable per instance
             if (instanceConfig.domState === false) {
                 env.PW_DOM_STATE_DISABLED = '1';
@@ -164,6 +185,11 @@ export class InstanceManager {
         }
         this.instances.delete(id);
         await this.cleanupProfile(id);
+        const virtualDisplay = this.virtualDisplays.get(id);
+        if (virtualDisplay) {
+            this.virtualDisplays.delete(id);
+            await this.virtualDisplayManager.release(virtualDisplay);
+        }
     }
     async closeAll() {
         const ids = Array.from(this.instances.keys());
@@ -188,9 +214,16 @@ export class InstanceManager {
         const browser = instanceConfig.browser ?? this.config.defaultBrowser;
         if (browser)
             args.push(`--browser=${browser}`);
-        // If a userDataDir is configured, copy the profile and use --user-data-dir
-        // Otherwise fall back to --isolated for a clean ephemeral profile
-        const sourceDir = instanceConfig.userDataDir || this.config.userDataDir;
+        const executablePath = this.config.executablePath;
+        if (executablePath)
+            args.push(`--executable-path=${executablePath}`);
+        // If a userDataDir is configured, copy the profile and use --user-data-dir.
+        // null = caller explicitly wants no profile (e.g. probe instances).
+        // undefined = defer to server config.
+        // Otherwise fall back to --isolated for a clean ephemeral profile.
+        const sourceDir = instanceConfig.userDataDir !== undefined
+            ? instanceConfig.userDataDir
+            : this.config.userDataDir;
         if (sourceDir) {
             const profileRoot = await this.copyProfile(instanceId, sourceDir, browser);
             args.push(`--user-data-dir=${profileRoot}`);
@@ -219,13 +252,17 @@ export class InstanceManager {
         else {
             // Chrome/Chromium: disable DBSC so copied cookies stay valid
             launchArgs.push('--disable-features=EnableBoundSessionCredentials');
-            // WM_CLASS for window manager routing (e.g. Hyprland workspace rules)
-            if (!headless)
-                launchArgs.push('--class=pw-mux');
+            // WM_CLASS for window manager routing via Hyprland workspace rules.
+            // Routes all instances to workspace 9 so they don't steal focus.
+            launchArgs.push('--class=pw-mux');
         }
         const config = {
             browser: {
                 launchOptions: {
+                    // Always launch Chrome in headed mode. "Headless" instances use an Xvfb
+                    // virtual display (DISPLAY=:N) so Chrome remains invisible without using
+                    // Chrome's headless flag — same rendering engine, no bot-detection signal.
+                    headless: false,
                     args: launchArgs,
                 },
             },

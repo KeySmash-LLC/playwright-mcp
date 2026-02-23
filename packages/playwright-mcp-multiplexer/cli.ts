@@ -28,6 +28,8 @@ function parseArgs(argv: string[]): MultiplexerConfig {
       config.cdpEndpoint = arg.split('=').slice(1).join('=');
     else if (arg === '--extension')
       config.extension = true;
+    else if (arg.startsWith('--executable-path='))
+      config.executablePath = arg.split('=').slice(1).join('=');
   }
 
   return config;

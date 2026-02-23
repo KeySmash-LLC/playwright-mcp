@@ -3,6 +3,8 @@ export declare class InstanceManager {
     private instances;
     private profileDirs;
     private configFiles;
+    private virtualDisplays;
+    private virtualDisplayManager;
     private nextId;
     private config;
     private workspaceRoot;
