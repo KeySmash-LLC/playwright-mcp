@@ -19,7 +19,8 @@
     "test": "npm run test --workspaces",
     "build": "npm run build --workspaces",
     "bump": "npm version --workspaces --no-git-tag-version",
-    "roll": "node roll.js"
+    "roll": "node roll.js",
+    "postinstall": "cd playwright && npm install"
   },
   "workspaces": [
     "packages/*"
