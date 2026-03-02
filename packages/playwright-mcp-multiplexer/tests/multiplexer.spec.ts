@@ -363,8 +363,9 @@ test.describe('Multiplexer MCP Server', () => {
 
   test.describe('auth export', () => {
     test('should export storage state from an instance', async () => {
-      const { client, cleanup } = await createMultiplexerClient();
       const tmpDir = path.join(__dirname, '..', 'test-results', 'auth-test');
+      // Pass --auth-dir so the savePath below is within the configured auth directory
+      const { client, cleanup } = await createMultiplexerClient([`--auth-dir=${tmpDir}`]);
       try {
         // Create instance and navigate to a page
         const createResult = await client.callTool({ name: 'instance_create', arguments: {} });
@@ -375,7 +376,7 @@ test.describe('Multiplexer MCP Server', () => {
           arguments: { instanceId, url: 'data:text/html,<h1>Auth Test</h1>' },
         });
 
-        // Export auth state
+        // Export auth state using a savePath inside the configured auth directory
         const savePath = path.join(tmpDir, 'test-state.json');
         const exportResult = await client.callTool({
           name: 'auth_export_state',
@@ -389,6 +390,76 @@ test.describe('Multiplexer MCP Server', () => {
         const stateData = JSON.parse(await fs.promises.readFile(savePath, 'utf-8'));
         expect(stateData).toHaveProperty('cookies');
         expect(stateData).toHaveProperty('origins');
+      } finally {
+        await cleanup();
+        await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
+    test('should reject savePath outside the auth directory', async () => {
+      const tmpDir = path.join(__dirname, '..', 'test-results', 'auth-reject-test');
+      const { client, cleanup } = await createMultiplexerClient([`--auth-dir=${tmpDir}`]);
+      try {
+        // Create instance
+        const createResult = await client.callTool({ name: 'instance_create', arguments: {} });
+        const instanceId = ((createResult.content as Array<{ text: string }>)[0].text).match(/"(inst-\d+)"/)![1];
+
+        // Attempt path traversal — absolute path outside authDir
+        const evilAbsolute = await client.callTool({
+          name: 'auth_export_state',
+          arguments: { instanceId, savePath: '/etc/evil' },
+        });
+        expect(evilAbsolute.isError).toBe(true);
+        expect((evilAbsolute.content as Array<{ text: string }>)[0].text).toContain('auth directory');
+
+        // Attempt path traversal — relative path escaping authDir
+        const evilRelative = await client.callTool({
+          name: 'auth_export_state',
+          arguments: { instanceId, savePath: '../../../tmp/evil.json' },
+        });
+        expect(evilRelative.isError).toBe(true);
+        expect((evilRelative.content as Array<{ text: string }>)[0].text).toContain('auth directory');
+
+        // Attempt prefix confusion — directory shares a prefix with authDir
+        const evilPrefix = await client.callTool({
+          name: 'auth_export_state',
+          arguments: { instanceId, savePath: `${tmpDir}-evil/state.json` },
+        });
+        expect(evilPrefix.isError).toBe(true);
+        expect((evilPrefix.content as Array<{ text: string }>)[0].text).toContain('auth directory');
+      } finally {
+        await cleanup();
+        await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
+    test('should export to default path when savePath is not provided', async () => {
+      const tmpDir = path.join(__dirname, '..', 'test-results', 'auth-default-test');
+      const { client, cleanup } = await createMultiplexerClient([`--auth-dir=${tmpDir}`]);
+      try {
+        // Create instance and navigate to a page
+        const createResult = await client.callTool({ name: 'instance_create', arguments: {} });
+        const instanceId = ((createResult.content as Array<{ text: string }>)[0].text).match(/"(inst-\d+)"/)![1];
+
+        await client.callTool({
+          name: 'browser_navigate',
+          arguments: { instanceId, url: 'data:text/html,<h1>Default Path Test</h1>' },
+        });
+
+        // Export without providing savePath — default path should be inside authDir
+        const exportResult = await client.callTool({
+          name: 'auth_export_state',
+          arguments: { instanceId },
+        });
+        expect(exportResult.isError).toBeFalsy();
+        const exportText = (exportResult.content as Array<{ text: string }>)[0].text;
+        expect(exportText).toContain('Exported auth state');
+
+        // Verify the generated path is inside the configured authDir
+        const match = exportText.match(/to: (.+)$/);
+        expect(match).toBeTruthy();
+        const generatedPath = match![1].trim();
+        expect(generatedPath).toContain(tmpDir);
       } finally {
         await cleanup();
         await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
