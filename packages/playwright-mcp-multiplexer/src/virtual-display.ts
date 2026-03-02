@@ -59,22 +59,36 @@ export class VirtualDisplayManager {
 
   private spawnXvfb(num: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (!settled) { settled = true; fn(); }
+      };
+
       const proc = spawn('Xvfb', [`:${num}`, '-screen', '0', '1920x1080x24', '-ac'], {
         stdio: 'ignore',
         detached: false,
       });
 
-      proc.on('error', reject);
-      // If Xvfb exits before we register it, the startup failed
+      proc.on('error', (err) => settle(() => reject(err)));
+
       proc.on('exit', (code) => {
-        if (!this.displays.has(num))
-          reject(new Error(`Xvfb :${num} exited before ready (code ${code})`));
+        settle(() => reject(new Error(`Xvfb :${num} exited before ready (code ${code})`)));
       });
 
       // The X lock file at /tmp/.X<N>-lock is the standard signal that the server is up
       this.waitForLock(num, 5000)
-        .then(() => { this.displays.set(num, proc); resolve(); })
-        .catch(err => { proc.kill(); reject(err); });
+        .then(() => {
+          // Re-check liveness: Xvfb may have exited between lock creation and now
+          if (proc.exitCode !== null) {
+            settle(() => reject(new Error(`Xvfb :${num} exited after creating lock (code ${proc.exitCode})`)));
+          } else {
+            settle(() => { this.displays.set(num, proc); resolve(); });
+          }
+        })
+        .catch(err => {
+          proc.kill();
+          settle(() => reject(err));
+        });
     });
   }
 
