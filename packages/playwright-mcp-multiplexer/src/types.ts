@@ -23,6 +23,7 @@ export interface InstanceConfig {
   extension?: boolean;
   args?: string[];
   domState?: boolean;
+  initScript?: string;
 }
 
 export interface MultiplexerConfig {
@@ -36,6 +37,7 @@ export interface MultiplexerConfig {
   cdpEndpoint?: string;
   extension?: boolean;
   executablePath?: string;
+  initScript?: string;
 }
 
 export interface AugmentedTool extends Tool {
