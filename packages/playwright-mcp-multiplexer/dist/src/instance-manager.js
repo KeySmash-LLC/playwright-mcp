@@ -119,8 +119,9 @@ class InstanceManager {
             }
             else {
                 env.PW_DOM_STATE_INSTANCE_ID = id;
-                if (this.workspaceRoot)
-                    env.PW_DOM_STATE_WORKSPACE = this.workspaceRoot;
+                const workspace = this.workspaceRoot ?? process.env.PW_DOM_STATE_WORKSPACE;
+                if (workspace)
+                    env.PW_DOM_STATE_WORKSPACE = workspace;
             }
             // Spawn a child @playwright/mcp instance. Uses the same entry point
             // (this script) with "child" prepended so it enters @playwright/mcp mode.

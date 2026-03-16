@@ -28,6 +28,8 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@playwright/test": "file:playwright/packages/playwright-test",
-    "@types/node": "^24.3.0"
+    "@types/node": "^24.3.0",
+    "playwright": "file:playwright/packages/playwright",
+    "playwright-core": "file:playwright/packages/playwright-core"
   }
 }
