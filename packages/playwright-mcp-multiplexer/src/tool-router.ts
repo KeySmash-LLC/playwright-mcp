@@ -103,10 +103,17 @@ export class ToolRouter {
         description = `Created browser instance "${instance.id}" (${browser}, ${headless ? 'headless' : 'headed'})`;
       }
 
+      const result: Record<string, unknown> = {
+        instanceId: instance.id,
+        description,
+      };
+      if (instance.debugPort)
+        result.debugPort = instance.debugPort;
+
       return {
         content: [{
           type: 'text',
-          text: description,
+          text: JSON.stringify(result),
         }],
       };
     } catch (error) {

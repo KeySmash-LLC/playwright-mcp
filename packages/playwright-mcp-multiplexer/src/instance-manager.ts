@@ -154,8 +154,30 @@ export class InstanceManager {
       instance.transport = transport;
       instance.client = client;
 
+      // Listen to child stderr for Chrome's DevTools debugging port.
+      // Chrome prints: "DevTools listening on ws://127.0.0.1:PORT/devtools/browser/..."
+      const stderrStream = (transport as unknown as { _process?: { stderr?: NodeJS.ReadableStream } })._process?.stderr;
+      if (stderrStream) {
+        stderrStream.on('data', (chunk: Buffer) => {
+          const text = chunk.toString();
+          process.stderr.write(text);
+          if (!instance.debugPort) {
+            const match = text.match(/DevTools listening on ws:\/\/[^:]+:(\d+)\//);
+            if (match)
+              instance.debugPort = parseInt(match[1], 10);
+          }
+        });
+      }
+
       await client.connect(transport);
       await client.ping();
+
+      // Wait briefly for Chrome's DevTools port to appear on stderr.
+      // Usually arrives within 1-2s of Chrome launch.
+      if (!instance.debugPort) {
+        for (let i = 0; i < 10 && !instance.debugPort; i++)
+          await new Promise(r => setTimeout(r, 200));
+      }
 
       instance.status = 'ready';
       return instance;
@@ -297,6 +319,10 @@ export class InstanceManager {
       // WM_CLASS for window manager routing via Hyprland workspace rules.
       // Routes all instances to workspace 9 so they don't steal focus.
       launchArgs.push('--class=pw-mux');
+      // Expose a CDP debugging port so external tools (e.g. Electron webview
+      // via DevTools frontend) can connect and show a live view.
+      // Port 0 = OS picks a free port; the actual port is logged to stderr.
+      launchArgs.push('--remote-debugging-port=0');
     }
 
     const config: Record<string, unknown> = {

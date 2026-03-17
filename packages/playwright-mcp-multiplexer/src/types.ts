@@ -11,6 +11,8 @@ export interface ManagedInstance {
   config: InstanceConfig;
   createdAt: number;
   status: InstanceStatus;
+  /** Chrome's remote debugging port (0 = not available). */
+  debugPort?: number;
 }
 
 export interface InstanceConfig {
