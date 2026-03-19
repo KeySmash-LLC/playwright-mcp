@@ -264,6 +264,10 @@ export class InstanceManager {
     if (instanceConfig.args)
       args.push(...instanceConfig.args);
 
+    const initScript = instanceConfig.initScript ?? this.config.initScript;
+    if (initScript)
+      args.push(`--init-script=${initScript}`);
+
     return args;
   }
 
