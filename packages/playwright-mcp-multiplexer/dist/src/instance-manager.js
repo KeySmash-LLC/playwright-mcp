@@ -62,6 +62,7 @@ class InstanceManager {
             cdpEndpoint: config.cdpEndpoint ?? '',
             extension: config.extension ?? false,
             executablePath: config.executablePath ?? '',
+            initScript: config.initScript ?? '',
         };
     }
     /**
@@ -235,6 +236,9 @@ class InstanceManager {
             args.push('--no-sandbox');
         if (instanceConfig.args)
             args.push(...instanceConfig.args);
+        const initScript = instanceConfig.initScript ?? this.config.initScript;
+        if (initScript)
+            args.push(`--init-script=${initScript}`);
         return args;
     }
     async createLaunchConfig(instanceId, browser) {

@@ -60,6 +60,7 @@ export class InstanceManager {
       cdpEndpoint: config.cdpEndpoint ?? '',
       extension: config.extension ?? false,
       executablePath: config.executablePath ?? '',
+      initScript: config.initScript ?? '',
     };
   }
 
