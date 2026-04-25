@@ -21,6 +21,8 @@ test('test snapshot tool list', async ({ client }) => {
   expect(new Set(tools.map(t => t.name))).toEqual(new Set([
     'browser_click',
     'browser_console_messages',
+    'browser_dom_snapshot',
+    'browser_dom_snapshot_raw',
     'browser_drag',
     'browser_evaluate',
     'browser_file_upload',
@@ -41,6 +43,7 @@ test('test snapshot tool list', async ({ client }) => {
     'browser_tabs',
     'browser_take_screenshot',
     'browser_wait_for',
+    'tabs_set_allowed',
   ]));
 });
 
